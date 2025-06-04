@@ -20,5 +20,6 @@ dev = [
     "pytest>=8.4.0",
     "pytest-benchmark>=5.1.0",
     "torch-geometric>=2.6.1",
+    "torch-scatter>=2.1.2",
     "torch-sparse>=0.6.18",
 ]

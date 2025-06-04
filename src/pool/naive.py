@@ -1,6 +1,6 @@
 import torch
 
 
-def naive_pool(features, neighbors):
+def naive_pool(features: torch.Tensor, neighbors: torch.Tensor) -> torch.Tensor:
     edge_features = features[neighbors, :]
     return edge_features.amax(dim=1)
