@@ -45,18 +45,18 @@ __device__ inline half zero_value<half>() {
 
 template<typename T>
 __global__ void __launch_bounds__(block) maxpool_forward_kernel(
-    T *output,                 // BNC
-    uint32_t *indices,         // BNC indices for backward
-    const T *feature,          // BNC
-    const uint64_t *knn,       // BNk
+    T *output,
+    uint32_t *indices,
+    const T *feature,
+    const uint64_t *knn,
     const uint64_t k,
     const uint64_t N,
     const uint64_t C_,
-    const uint64_t BNC
+    const uint64_t NC
 ){
     // idx = bNC + nC + c
     const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx >= BNC) return;
+    if (idx >= NC) return;
     const uint64_t C = C_ / group_size;
     // bN + n
     const uint64_t BN = idx / C;
@@ -102,8 +102,8 @@ void maxpool_forward(
     const uint64_t N = knn.size(0);
     const uint64_t k = knn.size(1);
     const uint64_t C = output.size(1);
-    const uint64_t BNC = 1 * N * (C / group_size);
-    const uint64_t grid = (BNC + block - 1) / block;
+    const uint64_t NC = 1 * N * (C / group_size);
+    const uint64_t grid = (NC + block - 1) / block;
 
     AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf, at::kBFloat16, feature.scalar_type(), "maxpool_forward", [&] {
         maxpool_forward_kernel<scalar_t><<<grid, block>>>(
@@ -111,24 +111,24 @@ void maxpool_forward(
             indices.data_ptr<uint32_t>(),
             feature.data_ptr<scalar_t>(),
             (const uint64_t*)knn.data_ptr(),
-            k, N, C, BNC
+            k, N, C, NC
         );
     });
 }
 
 template<typename T>
 __global__ void __launch_bounds__(block) maxpool_infer_kernel(
-    T *output,                 // BNC
-    const T *feature,          // BNC
-    const uint64_t *knn,       // BNk
+    T *output,
+    const T *feature,
+    const uint64_t *knn,
     const uint64_t k,
     const uint64_t N,
     const uint64_t C_,
-    const uint64_t BNC
+    const uint64_t NC
 ){
-    // idx = bNC + nC + c
+    // idx = nC + c
     const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx >= BNC) return;
+    if (idx >= NC) return;
     const uint64_t C = C_ / group_size;
     // bN + n
     const uint64_t BN = idx / C;
@@ -164,15 +164,15 @@ void maxpool_infer(
     const uint64_t k = knn.size(1);
     const uint64_t N = knn.size(0);
     const uint64_t C = output.size(1);
-    const uint64_t BNC = 1 * N * (C / group_size);
-    const uint64_t grid = (BNC + block - 1) / block;
+    const uint64_t NC = 1 * N * (C / group_size);
+    const uint64_t grid = (NC + block - 1) / block;
 
     AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf, at::kBFloat16, feature.scalar_type(), "maxpool_infer", [&] {
         maxpool_infer_kernel<scalar_t><<<grid, block>>>(
             output.data_ptr<scalar_t>(),
             feature.data_ptr<scalar_t>(),
             (const uint64_t*)knn.data_ptr(),
-            k, N, C, BNC
+            k, N, C, NC
         );
     });
 }
@@ -180,41 +180,87 @@ void maxpool_infer(
 // todo: this is almost certainly incorrect; I need a unit test
 template<typename T>
 __global__ void maxpool_backward_kernel(
-    T *output,                 // BNC
-    const uint32_t *indices,   // BNC indices for backward
-    const T *grad,             // BNC
+    T *output,
+    const uint32_t *indices,
+    const T *grad,
     const uint64_t N,
     const uint64_t C,
-    const uint64_t BNC
+    const uint64_t NC
 ){
     const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx >= BNC) return;
+    if (idx >= NC) return;
     const uint64_t n = idx / C % N;
     const uint64_t backidx = indices[idx];
     const T g = grad[idx];
     const uint64_t feature_base = idx - n*C + backidx*C;
 
-    // Fixme: this includes the subtraction from DeLA!
-    *(output + feature_base) = g;
+    // Generic atomic add - may need specialization for different types
+    atomicAdd(output + feature_base, g);
 }
 
+// Specialization for half precision backward (keeping the original half2 optimization)
+//template<>
+//__global__ void maxpool_backward_kernel<half>(
+//    half *output,
+//    const uint32_t *indices,
+//    const half *grad,
+//    const uint64_t N,
+//    const uint64_t C,
+//    const uint64_t NC
+//){
+//    const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+//    if (idx >= NC) return;
+//    const uint64_t n = idx / C % N;
+//    const uint64_t backidx = indices[idx];
+//    const half g = grad[idx];
+//    const uint64_t high = idx % 2;
+//    const uint64_t feature_base = idx - n*C + backidx*C - high;
+//
+//    half2 x;
+//    x.x = high ? __int2half_rz(0) : g;
+//    x.y = high ? g : __int2half_rz(0);
+//    atomicAdd(reinterpret_cast<half2*>(output + feature_base), x);
+//}
+
+template<>
+__global__ void maxpool_backward_kernel<at::Half>(
+    at::Half *output,
+    const uint32_t *indices,
+    const at::Half *grad,
+    const uint64_t N,
+    const uint64_t C,
+    const uint64_t NC
+){
+    const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx >= NC) return;
+    const uint64_t n = idx / C % N;
+    const uint64_t backidx = indices[idx];
+    const half g = grad[idx];
+    const uint64_t high = idx % 2;
+    const uint64_t feature_base = idx - n*C + backidx*C - high;
+
+    half2 x;
+    x.x = high ? __int2half_rz(0) : g;
+    x.y = high ? g : __int2half_rz(0);
+    atomicAdd(reinterpret_cast<half2*>(output + feature_base), x);
+}
 
 void maxpool_backward(
     torch::Tensor &output,
     const torch::Tensor &indices,
     const torch::Tensor &grad
 ){
-    const uint64_t N = output.size(0);
+    const uint64_t M = indices.size(0);
     const uint64_t C = output.size(1);
-    const uint64_t BNC = 1 * N * C;
-    const uint64_t grid = (BNC + block - 1) / block;
+    const uint64_t MC = M * C;
+    const uint64_t grid = (MC + block - 1) / block;
 
     AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf, at::kBFloat16, output.scalar_type(), "maxpool_backward", [&] {
         maxpool_backward_kernel<scalar_t><<<grid, block>>>(
             output.data_ptr<scalar_t>(),
             indices.data_ptr<uint32_t>(),
             grad.data_ptr<scalar_t>(),
-            N, C, BNC
+            M, C, MC
         );
     });
 }

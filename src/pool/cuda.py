@@ -32,22 +32,25 @@ class Maxpool(Function):
                 "32-bit cuda maxpool only supports channel dimensions which are multiples of 4"
 
         output = torch.empty((knn.size(0), feature.size(-1)), dtype=feature.dtype, device=feature.device)
+
+        ctx.m = feature.size(0)
         if training or feature.requires_grad:
             indices = torch.empty_like(output, dtype=torch.uint32)
             cuda.maxpool_forward(output, indices, feature, knn)
             ctx.save_for_backward(indices)
         else:
             cuda.maxpool_infer(output, feature, knn)
+
         return output
 
     @staticmethod
     @custom_bwd(device_type='cuda')
     def backward(ctx, grad: torch.Tensor):
         grad = grad.contiguous()
-        output = -grad  # todo: why is this negated?
+        output = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
         indices, = ctx.saved_tensors
         cuda.maxpool_backward(output, indices, grad)
-        return output, None, None
+        return output, None
 
 
 cuda_pool = Maxpool.apply
