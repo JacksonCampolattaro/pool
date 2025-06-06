@@ -219,3 +219,10 @@ void maxpool_backward(
         );
     });
 }
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+{
+    m.def("half_aligned_knn_edge_maxpooling_forward", &maxpool_forward);
+    m.def("half_aligned_knn_edge_maxpooling_infer", &maxpool_infer);
+    m.def("half_knn_edge_maxpooling_backward", &maxpool_backward);
+}

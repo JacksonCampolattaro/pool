@@ -8,7 +8,6 @@ from torch.utils import cpp_extension
 cutils = cpp_extension.load(
     'cuda_maxpool_',
     sources=[
-        os.path.join(os.path.dirname(__file__), 'cuda_maxpool.cpp'),
         os.path.join(os.path.dirname(__file__), 'maxpool.cu'),
     ],
     extra_cflags=["-O3", "-mavx2", "-funroll-loops"],
