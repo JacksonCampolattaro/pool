@@ -12,8 +12,7 @@ constexpr uint64_t group_size = 8;
 constexpr uint64_t block = 512;
 
 template<typename T>
-struct __builtin_align__(group_size*sizeof(T)) value_group
-{
+struct __builtin_align__(group_size*sizeof(T)) value_group {
     T v[group_size];
 };
 

@@ -22,7 +22,7 @@ class Maxpool(Function):
     @custom_fwd(device_type='cuda')
     def forward(ctx, feature: torch.Tensor, knn: torch.Tensor, training: bool = True) -> torch.Tensor:
         assert feature.is_cuda and knn.is_cuda
-        assert feature.is_contiguous() and knn.is_contiguous() and feature.size(0) == knn.size(0)
+        assert feature.is_contiguous() and knn.is_contiguous()
         assert knn.dtype == torch.int64
         if feature.dtype == torch.half:
             assert feature.shape[-1] % 8 == 0, \
@@ -30,8 +30,6 @@ class Maxpool(Function):
         elif feature.dtype == torch.float32:
             assert feature.shape[-1] % 4 == 0, \
                 "32-bit cuda maxpool only supports channel dimensions which are multiples of 4"
-        else:
-            raise NotImplementedError
 
         output = torch.empty((knn.size(0), feature.size(-1)), dtype=feature.dtype, device=feature.device)
         if training or feature.requires_grad:
@@ -46,7 +44,7 @@ class Maxpool(Function):
     @custom_bwd(device_type='cuda')
     def backward(ctx, grad: torch.Tensor):
         grad = grad.contiguous()
-        output = -grad
+        output = -grad  # todo: why is this negated?
         indices, = ctx.saved_tensors
         cuda.maxpool_backward(output, indices, grad)
         return output, None, None
