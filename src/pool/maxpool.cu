@@ -16,9 +16,6 @@ struct __builtin_align__(group_size*sizeof(T)) value_group {
     T v[group_size];
 };
 
-// Specialization for half precision
-using halfn = value_group<half>;
-
 // Generic comparison function
 template<typename T>
 __device__ inline bool is_greater(const T& a, const T& b) {
@@ -90,7 +87,21 @@ __global__ void __launch_bounds__(block) maxpool_forward_kernel(
     for (uint64_t f_idx = 0; f_idx < group_size; ++f_idx) {
         indices[feature_base + n * C_ + f_idx] = max_idx[f_idx];
     }
+
+
     *(value_group<T>*)(output + feature_base + n * C_) = max_val;
+//    const uint64_t output_base = feature_base + n * C_;
+//    if constexpr (std::is_same_v<T, at::Half>) {
+//        // Special handling for half precision
+//        for (uint64_t f_idx = 0; f_idx < group_size/2; ++f_idx)
+//            *reinterpret_cast<half2*>(output + output_base + f_idx*2) =
+//                __halves2half2(max_val.v[f_idx*2], max_val.v[f_idx*2+1]);
+//
+//    } else {
+//        // Default handling for other types
+//        *(value_group<T>*)(output + output_base) = max_val;
+//    }
+
 }
 
 void maxpool_forward(
@@ -154,6 +165,17 @@ __global__ void __launch_bounds__(block) maxpool_infer_kernel(
     }
 
     *(value_group<T>*)(output + feature_base + n * C_) = max_val;
+
+//    const uint64_t output_base = feature_base + n * C_;
+//    if constexpr (std::is_same_v<T, at::Half>) {
+//        for (uint64_t f_idx = 0; f_idx < group_size/2; ++f_idx)
+//            *reinterpret_cast<half2*>(output + output_base + f_idx*2) =
+//                __halves2half2(max_val.v[f_idx*2], max_val.v[f_idx*2+1]);
+//
+//    } else {
+//        *(value_group<T>*)(output + output_base) = max_val;
+//    }
+
 }
 
 void maxpool_infer(
@@ -177,7 +199,6 @@ void maxpool_infer(
     });
 }
 
-// todo: this is almost certainly incorrect; I need a unit test
 template<typename T>
 __global__ void maxpool_backward_kernel(
     T *output,
@@ -194,32 +215,18 @@ __global__ void maxpool_backward_kernel(
     const T g = grad[idx];
     const uint64_t feature_base = idx - n*C + backidx*C;
 
-    // Generic atomic add - may need specialization for different types
-    atomicAdd(output + feature_base, g);
+    if constexpr (std::is_same_v<T, at::Half>) {
+        const uint64_t high = idx % 2;
+        const half2 x = __halves2half2(
+            high ? __int2half_rz(0) : *reinterpret_cast<const half*>(&g),
+            high ? *reinterpret_cast<const half*>(&g) : __int2half_rz(0)
+        );
+        atomicAdd(reinterpret_cast<half2*>(output + feature_base - high), x);
+    } else {
+        atomicAdd(output + feature_base, g);
+    }
 }
 
-template<>
-__global__ void maxpool_backward_kernel<at::Half>(
-    at::Half *output,
-    const uint32_t *indices,
-    const at::Half *grad,
-    const uint64_t N,
-    const uint64_t C,
-    const uint64_t NC
-){
-    const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx >= NC) return;
-    const uint64_t n = idx / C % N;
-    const uint64_t backidx = indices[idx];
-    const half g = grad[idx];
-    const uint64_t high = idx % 2;
-    const uint64_t feature_base = idx - n*C + backidx*C - high;
-
-    half2 x;
-    x.x = high ? __int2half_rz(0) : g;
-    x.y = high ? g : __int2half_rz(0);
-    atomicAdd(reinterpret_cast<half2*>(output + feature_base), x);
-}
 
 void maxpool_backward(
     torch::Tensor &output,
