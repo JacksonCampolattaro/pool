@@ -198,30 +198,6 @@ __global__ void maxpool_backward_kernel(
     atomicAdd(output + feature_base, g);
 }
 
-// Specialization for half precision backward (keeping the original half2 optimization)
-//template<>
-//__global__ void maxpool_backward_kernel<half>(
-//    half *output,
-//    const uint32_t *indices,
-//    const half *grad,
-//    const uint64_t N,
-//    const uint64_t C,
-//    const uint64_t NC
-//){
-//    const uint64_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-//    if (idx >= NC) return;
-//    const uint64_t n = idx / C % N;
-//    const uint64_t backidx = indices[idx];
-//    const half g = grad[idx];
-//    const uint64_t high = idx % 2;
-//    const uint64_t feature_base = idx - n*C + backidx*C - high;
-//
-//    half2 x;
-//    x.x = high ? __int2half_rz(0) : g;
-//    x.y = high ? g : __int2half_rz(0);
-//    atomicAdd(reinterpret_cast<half2*>(output + feature_base), x);
-//}
-
 template<>
 __global__ void maxpool_backward_kernel<at::Half>(
     at::Half *output,
@@ -255,7 +231,7 @@ void maxpool_backward(
     const uint64_t MC = M * C;
     const uint64_t grid = (MC + block - 1) / block;
 
-    AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf, at::kBFloat16, output.scalar_type(), "maxpool_backward", [&] {
+    AT_DISPATCH_FLOATING_TYPES_AND(at::kHalf, output.scalar_type(), "maxpool_backward", [&] {
         maxpool_backward_kernel<scalar_t><<<grid, block>>>(
             output.data_ptr<scalar_t>(),
             indices.data_ptr<uint32_t>(),
@@ -265,8 +241,7 @@ void maxpool_backward(
     });
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
-{
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("maxpool_forward", &maxpool_forward);
     m.def("maxpool_infer", &maxpool_infer);
     m.def("maxpool_backward", &maxpool_backward);

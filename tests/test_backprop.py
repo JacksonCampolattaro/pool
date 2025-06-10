@@ -34,24 +34,33 @@ class TestBackprop:
         features, neighbors = generate_input_data(*config, device=device, dtype=dtype, requires_grad=True)
         features_ref = features.clone().detach().requires_grad_(True)
         edges = edges_for_pool_function(features, neighbors, pool_function)
+        # print(features)
+
+
+        if dtype == torch.bfloat16:
+            pytest.skip("BFloat not supported for backprop")
+
+        # todo: way too lax
+        # torch.autograd.gradcheck(pool_function, (features, edges), eps=0.1, atol=0.1, nondet_tol=0.1)
 
         out = pool_function(features, edges)
         out_ref = naive_pool(features_ref, neighbors)
+        # print(out)
 
-        # todo: way too lax
-        torch.autograd.gradcheck(pool_function, (features, edges), eps=1, atol=1, nondet_tol=1)
-        #
-        # out.sum().backward()
-        # out_ref.sum().backward()
-        #
-        # diff = features.grad - features_ref.grad
-        # close = torch.isclose(features.grad, features_ref.grad, atol=1e-4)
-        # # print(diff[~close], (~close).nonzero().size(0))
+        (out ** 2).sum().backward()
+        (out_ref ** 2).sum().backward()
+
+        # print(features.grad)
+
+        diff = features.grad - features_ref.grad
+        close = torch.isclose(features.grad, features_ref.grad, atol=1e-4)
+        print(diff[~close], (~close).nonzero().size(0))
         # print((~close).float().mean())
-        # # print(features.grad - features_ref.grad)
-        # # print(torch.isclose(features.grad, features_ref.grad, atol=1e-4))
+        # print(features.grad - features_ref.grad)
+        # print(torch.isclose(features.grad, features_ref.grad, atol=1e-4))
         # assert (~close).float().mean() < 0.001
-        # assert torch.isclose(features.grad, features_ref.grad, atol=1e-4).all()
+        # print(features.grad - features_ref.grad)
+        assert torch.isclose(features.grad, features_ref.grad, atol=1e-4).all()
 
     @parameterizeByDevice
     @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
@@ -65,53 +74,3 @@ class TestBackprop:
 
         benchmark(fwd_and_bwd)
 
-    # @parameterizeByDevice
-    # @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
-    # def test_naive_pool(self, benchmark, device: str, config: tuple):
-    #     features, neighbors = generate_input_data(*config, device=device, requires_grad=True)
-    #
-    #     def fwd_and_bwd():
-    #         naive_pool(features, neighbors).sum().backward()
-    #
-    #     benchmark(fwd_and_bwd)
-    #
-    # @parameterizeByDevice
-    # @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
-    # def test_pyg_pool(self, benchmark, device, config: tuple):
-    #     features, neighbors = generate_input_data(*config, device=device, requires_grad=True)
-    #     edges = to_edges(features, neighbors)
-    #
-    #     def fwd_and_bwd():
-    #         pyg_pool(features, edges).sum().backward()
-    #
-    #     benchmark(fwd_and_bwd)
-    #
-    # @parameterizeByDevice
-    # @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
-    # def test_sparse_pool(self, benchmark, device, config: tuple):
-    #     features, neighbors = generate_input_data(*config, device=device, requires_grad=True)
-    #     sparse_edges = to_sparse_edges(features, neighbors)
-    #
-    #     def fwd_and_bwd():
-    #         pyg_pool(features, sparse_edges).sum().backward()
-    #
-    #     benchmark(fwd_and_bwd)
-    #
-    # @parameterizeByDevice
-    # @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
-    # def test_tosparse_pool(self, benchmark, device, config: tuple):
-    #     features, neighbors = generate_input_data(*config, device=device, requires_grad=True)
-    #
-    #     def fwd_and_bwd():
-    #         tosparse_pool(features, neighbors).sum().backward()
-    #
-    #     benchmark(fwd_and_bwd)
-    #
-    # @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
-    # def test_cuda_pool(self, benchmark, config: tuple):
-    #     features, neighbors = generate_input_data(*config, device='cuda', requires_grad=True)
-    #
-    #     def fwd_and_bwd():
-    #         cuda_pool(features, neighbors).sum().backward()
-    #
-    #     benchmark(fwd_and_bwd)

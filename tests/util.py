@@ -24,9 +24,7 @@ def generate_input_data(
         device: str = 'cpu', dtype: torch.dtype = None, requires_grad: bool = False
 ):
     dtype = dtype if dtype else (torch.float32 if device == 'cpu' else torch.float16)
-    features = torch.randn([m, c]).to(device=device, dtype=dtype)
-    if requires_grad:
-        features.requires_grad_()
+    features = torch.randn([m, c], device=device, dtype=dtype, requires_grad=requires_grad)
     neighbors = torch.randint(m, size=[n, k]).to(device=device)
     return features, neighbors
 
