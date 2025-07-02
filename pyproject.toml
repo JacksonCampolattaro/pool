@@ -1,6 +1,6 @@
 [project]
 name = "pool"
-version = "0.1.0"
+version = "0.1.1"
 description = "An optimized implementation of KNN pooling in pytorch"
 readme = "README.md"
 authors = [
