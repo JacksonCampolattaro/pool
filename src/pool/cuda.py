@@ -20,37 +20,36 @@ class Maxpool(Function):
 
     @staticmethod
     @custom_fwd(device_type='cuda')
-    def forward(ctx, feature: torch.Tensor, knn: torch.Tensor, training: bool = True) -> torch.Tensor:
-        assert feature.is_cuda and knn.is_cuda
-        assert feature.is_contiguous() and knn.is_contiguous()
-        assert knn.dtype == torch.int64
-        if feature.dtype == torch.half:
-            assert feature.shape[-1] % 8 == 0, \
-                "16-bit cuda maxpool only supports channel dimensions which are multiples of 8"
-        elif feature.dtype == torch.float32:
-            assert feature.shape[-1] % 4 == 0, \
-                "32-bit cuda maxpool only supports channel dimensions which are multiples of 4"
+    def forward(ctx, x: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+        assert x.is_cuda and index.is_cuda
+        assert x.is_contiguous() and index.is_contiguous()
+        assert index.dtype == torch.int64 # TODO: maybe other index types could be supported?
+        if x.dtype == torch.half and x.shape[-1] % 8 != 0:
+            raise ValueError("For float16, channel dimension must be a multiple of 8.")
+        elif x.dtype == torch.float32 and x.shape[-1] % 4 != 0:
+            raise ValueError("For float32, channel dimension must be a multiple of 4.")
 
-        output = torch.empty((knn.size(0), feature.size(-1)), dtype=feature.dtype, device=feature.device)
 
-        ctx.m = feature.size(0)
-        if training or feature.requires_grad:
-            indices = torch.empty_like(output, dtype=torch.uint32)
-            cuda.maxpool_forward(output, indices, feature, knn)
+        out = torch.empty((index.size(0), x.size(-1)), dtype=x.dtype, device=x.device)
+
+        ctx.m = x.size(0)
+        if ctx.needs_input_grad[0]:
+            indices = torch.empty_like(out, dtype=torch.uint32)
+            cuda.maxpool_forward(out, indices, x, index)
             ctx.save_for_backward(indices)
         else:
-            cuda.maxpool_infer(output, feature, knn)
+            cuda.maxpool_infer(out, x, index)
 
-        return output
+        return out
 
     @staticmethod
     @custom_bwd(device_type='cuda')
     def backward(ctx, grad: torch.Tensor):
         grad = grad.contiguous()
-        output = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
+        out = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
         indices, = ctx.saved_tensors
-        cuda.maxpool_backward(output, indices, grad)
-        return output, None
+        cuda.maxpool_backward(out, indices, grad)
+        return out, None
 
 
-cuda_pool = Maxpool.apply
+max_pool = Maxpool.apply

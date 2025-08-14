@@ -7,8 +7,8 @@ from torch_geometric import EdgeIndex
 from torch_geometric.nn import SimpleConv
 from torch_sparse import SparseTensor
 
-from pool.cuda import cuda_pool
-from pool.naive import naive_pool
+from pool.cuda import max_pool as cuda_pool
+from pool.naive import max_pool as naive_pool
 
 VALUE_DTYPES = [
     pytest.param(torch.half, id='half'),
@@ -24,26 +24,26 @@ def generate_input_data(
         device: str = 'cpu', dtype: torch.dtype = None, requires_grad: bool = False
 ):
     dtype = dtype if dtype else (torch.float32 if device == 'cpu' else torch.float16)
-    features = torch.randn([m, c], device=device, dtype=dtype, requires_grad=requires_grad)
-    neighbors = torch.randint(m, size=[n, k]).to(device=device)
-    return features, neighbors
+    x = torch.randn([m, c], device=device, dtype=dtype, requires_grad=requires_grad)
+    index = torch.randint(m, size=[n, k]).to(device=device)
+    return x, index
 
 
-def to_edges(features: torch.Tensor, neighbors: torch.Tensor):
+def to_edges(x: torch.Tensor, index: torch.Tensor):
     return EdgeIndex(torch.stack([
-        neighbors.flatten(),
-        torch.arange(neighbors.size(0)).repeat_interleave(neighbors.size(1)).to(device=neighbors.device),
-    ]), sparse_size=(features.size(0), neighbors.size(0))).validate()
+        index.flatten(),
+        torch.arange(index.size(0)).repeat_interleave(index.size(1)).to(device=index.device),
+    ]), sparse_size=(x.size(0), index.size(0))).validate()
 
 
-def to_sparse_edges(features: torch.Tensor, neighbors: torch.Tensor):
+def to_sparse_edges(x: torch.Tensor, index: torch.Tensor):
     return SparseTensor(
         row=torch.arange(
-            neighbors.size(0),
-            device=neighbors.device, dtype=neighbors.dtype
-        ).unsqueeze(-1).expand([-1, neighbors.size(1)]).flatten(),
-        col=neighbors.sort(dim=-1)[0].flatten(),
-        sparse_sizes=(neighbors.size(0), features.size(0)),
+            index.size(0),
+            device=index.device, dtype=index.dtype
+        ).unsqueeze(-1).expand([-1, index.size(1)]).flatten(),
+        col=index.sort(dim=-1)[0].flatten(),
+        sparse_sizes=(index.size(0), x.size(0)),
         is_sorted=True,
         trust_data=True,
     )
@@ -52,30 +52,30 @@ def to_sparse_edges(features: torch.Tensor, neighbors: torch.Tensor):
 pyg_conv = SimpleConv(aggr='max')
 
 
-def pyg_pool(features: torch.Tensor, edges: torch_geometric.EdgeIndex | SparseTensor):
-    return pyg_conv((features, None), edges)
+def pyg_pool(x: torch.Tensor, edges: torch_geometric.EdgeIndex | SparseTensor):
+    return pyg_conv((x, None), edges)
 
 
 sparse_pool = pyg_pool
 
 
-def tosparse_pool(features, neighbors):
-    sparse_edges = to_sparse_edges(features, neighbors)
-    return pyg_conv((features, None), sparse_edges)
+def tosparse_pool(x, index):
+    sparse_edges = to_sparse_edges(x, index)
+    return pyg_conv((x, None), sparse_edges)
 
 
-def edges_for_pool_function(features, neighbors, function: Callable):
-    if function == cuda_pool and not features.is_cuda:
+def edges_for_pool_function(x, index, function: Callable):
+    if function == cuda_pool and not x.is_cuda:
         pytest.skip("Cannot test cuda kernel on other devices")
-    if features.dtype == torch.bfloat16 and function in (sparse_pool, tosparse_pool):
+    if x.dtype == torch.bfloat16 and function in (sparse_pool, tosparse_pool):
         pytest.skip("torch_sparse doesn't seem to support bf16 values")
 
     if function == pyg_pool:
-        return to_edges(features, neighbors)
+        return to_edges(x, index)
     if function == sparse_pool:
-        return to_sparse_edges(features, neighbors)
+        return to_sparse_edges(x, index)
     else:
-        return neighbors
+        return index
 
 
 POOL_FUNCTIONS = [

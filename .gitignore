@@ -1,0 +1,13 @@
+__pycache__/
+.idea/
+
+.python-version
+uv.lock
+
+*.ini
+*.ckpt
+*.pkl
+*.bak
+
+data/
+
