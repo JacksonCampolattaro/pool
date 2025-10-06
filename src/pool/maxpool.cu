@@ -5,6 +5,7 @@
 #include <cuda_fp16.h>
 #include <assert.h>
 
+#include <torch/library.h>
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 
@@ -246,6 +247,13 @@ void maxpool_backward(
             M, C, MC
         );
     });
+}
+
+
+TORCH_LIBRARY(cuda_maxpool, m) {
+    m.def("maxpool_forward", &maxpool_forward);
+    m.def("maxpool_infer", &maxpool_infer);
+    m.def("maxpool_backward", &maxpool_backward);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

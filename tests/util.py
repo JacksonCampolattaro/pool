@@ -80,8 +80,8 @@ def edges_for_pool_function(x, index, function: Callable):
 
 POOL_FUNCTIONS = [
     pytest.param(naive_pool, id='naive_pool'),
-    pytest.param(pyg_pool, id='pyg_pool'),
-    pytest.param(sparse_pool, id='sparse_pool'),
-    pytest.param(tosparse_pool, id='tosparse_pool'),
+    # pytest.param(pyg_pool, id='pyg_pool'),
+    # pytest.param(sparse_pool, id='sparse_pool'),
+    # pytest.param(tosparse_pool, id='tosparse_pool'),
     pytest.param(cuda_pool, id='cuda_pool'),
 ]

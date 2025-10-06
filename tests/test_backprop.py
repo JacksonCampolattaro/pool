@@ -13,6 +13,7 @@ SMALL_TEST_CONFIGS_M_N_K_C = [
     (32, 32, 8, 16),
     (32, 64, 8, 16),
     (64, 32, 8, 16),
+    (2048, 2048, 8, 16),
 ]
 
 class TestBackprop:
@@ -51,7 +52,7 @@ class TestBackprop:
 
         diff = features.grad - features_ref.grad
         close = torch.isclose(features.grad, features_ref.grad, rtol=1e-2)
-        print(features_ref[~close], diff[~close], (~close).nonzero().size(0))
+        print(features_ref[~close], diff[~close], (~close).nonzero().size(0), features.size(0))
         # print((~close).float().mean())
         # print(features.grad - features_ref.grad)
         # print(torch.isclose(features.grad, features_ref.grad, atol=1e-4))

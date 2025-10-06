@@ -35,10 +35,10 @@ class Maxpool(Function):
         ctx.m = x.size(0)
         if ctx.needs_input_grad[0]:
             indices = torch.empty_like(out, dtype=torch.uint32)
-            cuda.maxpool_forward(out, indices, x, index)
+            torch.ops.cuda_maxpool.maxpool_forward(out, indices, x, index)
             ctx.save_for_backward(indices)
         else:
-            cuda.maxpool_infer(out, x, index)
+            torch.ops.cuda_maxpool.maxpool_infer(out, x, index)
 
         return out
 
@@ -48,7 +48,7 @@ class Maxpool(Function):
         grad = grad.contiguous()
         out = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
         indices, = ctx.saved_tensors
-        cuda.maxpool_backward(out, indices, grad)
+        torch.ops.cuda_maxpool.maxpool_backward(out, indices, grad)
         return out, None
 
 
