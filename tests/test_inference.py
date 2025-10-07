@@ -10,9 +10,9 @@ from tests.util import VALUE_DTYPES, generate_input_data, edges_for_pool_functio
 TEST_CONFIGS_M_N_K_C = [
     (1024, 128, 24, 32),
     (128, 1024, 24, 32),
-    # (1024 * 4, 1024 * 4, 24, 32),
-    # (1024 * 64, 1024 * 64, 24, 256),
-    # (1024 * 256, 1024 * 256, 24, 64),
+    (1024 * 4, 1024 * 4, 24, 32),
+    (1024 * 64, 1024 * 64, 24, 256),
+    (1024 * 256, 1024 * 256, 24, 64),
 ]
 
 
@@ -36,6 +36,7 @@ class TestInference:
         edges = edges_for_pool_function(features, neighbors, pool_function)
 
         pooled = pool_function(features, edges)
+        # torch.library.opcheck(pool_function, features, edges)
 
         assert pooled.shape == (n, features.size(-1))
 
