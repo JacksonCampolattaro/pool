@@ -13,7 +13,7 @@ cuda = cpp_extension.load(
     ],
     extra_cflags=["-O3", "-mavx2", "-funroll-loops"],
     extra_cuda_cflags=["-Xptxas", "-v"],
-    verbose=True,
+    verbose=False,
 )
 
 
