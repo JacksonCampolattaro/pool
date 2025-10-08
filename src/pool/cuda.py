@@ -17,27 +17,27 @@ cuda = cpp_extension.load(
 )
 
 
-@torch.library.custom_op("pool::max_pool_infer_inplace", mutates_args={'output'})
-def max_pool_infer_inplace(output: Tensor, x: Tensor, index: Tensor) -> None:
+@torch.library.custom_op("pool::maxpool_infer_inplace", mutates_args={'output'})
+def maxpool_infer_inplace(output: Tensor, x: Tensor, index: Tensor) -> None:
     return cuda.maxpool_infer_inplace(output, x, index)
  
-@torch.library.register_fake("pool::max_pool_infer_inplace")
+@torch.library.register_fake("pool::maxpool_infer_inplace")
 def _(output, x, index):
     return
 
-@torch.library.custom_op("pool::max_pool_forward_inplace", mutates_args={'output', 'indices'})
-def max_pool_forward_inplace(output: Tensor, indices: Tensor, x: Tensor, index: Tensor) -> None:
+@torch.library.custom_op("pool::maxpool_forward_inplace", mutates_args={'output', 'indices'})
+def maxpool_forward_inplace(output: Tensor, indices: Tensor, x: Tensor, index: Tensor) -> None:
     return cuda.maxpool_forward_inplace(output, indices, x, index)
  
-@torch.library.register_fake("pool::max_pool_forward_inplace")
+@torch.library.register_fake("pool::maxpool_forward_inplace")
 def _(output, indices, x, index):
     return
 
-@torch.library.custom_op("pool::max_pool_backward_inplace", mutates_args={'output'})
-def max_pool_backward_inplace(output: Tensor, indices: Tensor, grad: Tensor) -> Tensor:
+@torch.library.custom_op("pool::maxpool_backward_inplace", mutates_args={'output'})
+def maxpool_backward_inplace(output: Tensor, indices: Tensor, grad: Tensor) -> Tensor:
     return cuda.maxpool_backward_inplace(output, indices, grad)
  
-@torch.library.register_fake("pool::max_pool_backward_inplace")
+@torch.library.register_fake("pool::maxpool_backward_inplace")
 def _(output, indices, grad):
     return
 
@@ -59,10 +59,10 @@ class MaxPool(Function):
         ctx.m = x.size(0)
         if ctx.needs_input_grad[0]:
             indices = torch.empty_like(out, dtype=torch.uint32)
-            max_pool_forward_inplace(out, indices, x, index)
+            maxpool_forward_inplace(out, indices, x, index)
             ctx.save_for_backward(indices)
         else:
-            max_pool_infer_inplace(out, x, index)
+            maxpool_infer_inplace(out, x, index)
 
         return out
 
@@ -72,7 +72,7 @@ class MaxPool(Function):
         grad = grad.contiguous()
         indices, = ctx.saved_tensors
         out = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
-        max_pool_backward_inplace(out, indices, grad)
+        maxpool_backward_inplace(out, indices, grad)
         return out, None
 
-max_pool = MaxPool.apply
+maxpool = MaxPool.apply

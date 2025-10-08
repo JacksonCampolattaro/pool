@@ -7,8 +7,8 @@ from torch_geometric import EdgeIndex
 from torch_geometric.nn import SimpleConv
 from torch_sparse import SparseTensor
 
-from pool.cuda import max_pool as cuda_pool
-from pool.naive import max_pool as naive_pool
+from pool.cuda import maxpool as cuda_pool
+from pool.naive import maxpool as naive_pool
 
 VALUE_DTYPES = [
     pytest.param(torch.half, id='half'),

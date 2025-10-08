@@ -1,9 +1,11 @@
 from torch import Tensor
 
-def max_pool(x: Tensor, index: Tensor):
+def maxpool(x: Tensor, index: Tensor):
     if x.is_cuda:
-        from pool import cuda
-        return cuda.max_pool(x, index)
+        from . import cuda
+        return cuda.maxpool(x, index)
     else:
-        from pool import naive
-        return naive.max_pool(x, index)
+        from . import naive
+        return naive.maxpool(x, index)
+
+

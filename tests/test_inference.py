@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch_geometric.testing.decorators import withDevice as parameterizeByDevice
 
-from pool.naive import max_pool as naive_pool
+from pool.naive import maxpool as naive_pool
 from tests.util import VALUE_DTYPES, generate_input_data, edges_for_pool_function, POOL_FUNCTIONS
 
 TEST_CONFIGS_M_N_K_C = [
