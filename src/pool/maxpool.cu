@@ -119,19 +119,6 @@ void maxpool_forward_inplace(Tensor &output, Tensor &indices,
       });
 }
 
-std::tuple<Tensor, Tensor> maxpool_forward(const Tensor &feature,
-                                           const Tensor &knn) {
-  const int64_t N = knn.size(0);
-  const int64_t C = feature.size(1);
-
-  auto output = torch::empty({N, C}, feature.options());
-  auto indices = torch::empty(
-      {N, C}, torch::dtype(torch::kUInt32).device(feature.device()));
-
-  maxpool_forward_inplace(output, indices, feature, knn);
-  return {output, indices};
-}
-
 template <typename T>
 __global__ void __launch_bounds__(block)
     maxpool_infer_kernel(T *output, const T *feature, const uint64_t *knn,
@@ -196,16 +183,6 @@ void maxpool_infer_inplace(Tensor &output, const Tensor &feature,
       });
 }
 
-Tensor maxpool_infer(const Tensor &feature, const Tensor &knn) {
-  const int64_t N = knn.size(0);
-  const int64_t C = feature.size(1);
-
-  auto output = torch::empty({N, C}, feature.options());
-
-  maxpool_infer_inplace(output, feature, knn);
-  return output;
-}
-
 template <typename T>
 __global__ void maxpool_backward_kernel(T *output, const uint32_t *indices,
                                         const T *grad, const uint64_t N,
@@ -244,159 +221,10 @@ void maxpool_backward_inplace(Tensor &output, const Tensor &indices,
       });
 }
 
-Tensor maxpool_backward(int64_t m, const Tensor &indices, const Tensor &grad) {
-  const int64_t C = grad.size(1);
-  auto output = torch::zeros({m, C}, grad.options());
-  maxpool_backward_inplace(output, indices, grad);
-  return output;
-}
-
-class MaxPool : public torch::autograd::Function<MaxPool> {
-    public:
-
-        static Tensor forward(
-            torch::autograd::AutogradContext* ctx,
-            const Tensor &x,
-            const Tensor &index
-        ) {
-            
-            // todo: check DTypes
-            auto x_contig = x.contiguous();
-            auto index_contig = index.contiguous();            
-
-            ctx->saved_data["m"] = x.size(0);
-            auto [out, indices] = maxpool_forward(x_contig, index_contig);
-            ctx->save_for_backward({indices});
-            return out;
-            // if (ctx->needs_input_grad(0)) {
-            //     auto [out, indices] = maxpool_forward(x_contig,
-            //     index_contig); ctx->save_for_backward({indices}); return out;
-            // } else {
-            //     return maxpool_infer(x_contig, index_contig);
-            // }
-        }
-
-        static torch::autograd::variable_list backward(
-            torch::autograd::AutogradContext* ctx,
-            torch::autograd::variable_list grad
-        ) {
-
-            auto grad_contig = grad[0].contiguous();
-            auto indices = ctx->get_saved_variables()[0];
-            auto m = ctx->saved_data["m"].toInt();
-            return {maxpool_backward(m, indices, grad_contig), {}};
-        }
-};
-
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  // m.def("maxpool_forward_inplace", &maxpool_forward_inplace);
-  // m.def("maxpool_infer_inplace", &maxpool_infer_inplace);
-  // m.def("maxpool_backward_inplace", &maxpool_backward_inplace);
-  //   m.def("maxpool", [](const Tensor &x, const Tensor &index) -> Tensor {
-  //   return MaxPool::apply(x, index);
-  // });
-  m.def("maxpool_forward", &maxpool_forward);
-  m.def("maxpool_infer", &maxpool_infer);
-  m.def("maxpool_backward", &maxpool_backward);
-}
-
-TORCH_LIBRARY(pool, m) {
-  m.def("maxpool(Tensor x, Tensor index) -> Tensor");
-}
-
-TORCH_LIBRARY_IMPL(pool, Autograd, m) {
-  m.impl("maxpool", [](const Tensor &x, const Tensor &index) -> Tensor {
-    return MaxPool::apply(x, index);
-  });
-}
-
-TORCH_LIBRARY_IMPL(pool, CUDA, m) {
-  m.impl("maxpool", [](const Tensor &x, const Tensor &index) -> Tensor {
-    return maxpool_infer(x, index);
-  });
-}
-
-TORCH_LIBRARY_IMPL(pool, Meta, m) {
-  m.impl("maxpool", [](const Tensor &x, const Tensor &index) -> Tensor {
-    auto N = index.size(0);
-    auto C = x.size(1);
-    return at::empty({N, C}, x.options());
-  });
+  m.def("maxpool_forward_inplace", &maxpool_forward_inplace);
+  m.def("maxpool_infer_inplace", &maxpool_infer_inplace);
+  m.def("maxpool_backward_inplace", &maxpool_backward_inplace);
 }
 
 
-// TORCH_LIBRARY_IMPL(cuda_maxpool, Meta, m) {
-//   m.impl("maxpool", [](const Tensor &x, const Tensor &index) -> Tensor {
-//     auto N = index.size(0);
-//     auto C = x.size(1);
-//     return at::empty({N, C}, x.options());
-//   });
-// }
-
-// TORCH_LIBRARY_IMPL(cuda_maxpool, Meta, m) {
-//   m.impl("maxpool", [](const Tensor &feature, const Tensor &knn) -> Tensor {
-//     return MaxPool::apply(feature, knn);
-//   });
-// }
-
-// TORCH_LIBRARY(cuda_maxpool, m) {
-//   // m.def("maxpool_forward_inplace", &maxpool_forward_inplace);
-//   // m.def("maxpool_infer_inplace", &maxpool_infer_inplace);
-//   // m.def("maxpool_backward_inplace", &maxpool_backward_inplace);
-//   m.def("maxpool_forward", &maxpool_forward);
-//   m.def("maxpool_infer", &maxpool_infer);
-//   m.def("maxpool_backward", &maxpool_backward);
-// }
-
-// TORCH_LIBRARY_IMPL(cuda_maxpool, Meta, m) {
-
-//   // m.impl("maxpool_forward_inplace",
-//   //        [](Tensor &out, Tensor &indices, const Tensor &feature,
-//   //           const Tensor &knn) {
-//   //          // Shape inference
-//   //          auto N = knn.size(0);
-//   //          auto C = feature.size(1);
-//   //          out.resize_({N, C});
-//   //          indices.resize_({N, C}).toType(torch::kUInt32);
-//   //        });
-
-//   // m.impl("maxpool_infer_inplace",
-//   //        [](Tensor &out, const Tensor &feature, const Tensor &knn) {
-//   //          auto N = knn.size(0);
-//   //          auto C = feature.size(1);
-//   //          out.resize_({N, C});
-//   //        });
-
-//   // m.impl(
-//   //     "maxpool_backward_inplace",
-//   //     [](Tensor &grad_input, const Tensor &indices, const Tensor &grad_output) {
-//   //       auto M = grad_input.size(0);
-//   //       auto C = grad_output.size(1);
-//   //       grad_input.resize_({M, C});
-//   //     });
-
-//   m.impl("maxpool_forward",
-//          [](const Tensor &feature,
-//             const Tensor &knn) -> std::tuple<Tensor, Tensor> {
-//            auto N = knn.size(0);
-//            auto C = feature.size(1);
-//            auto output = at::empty({N, C}, feature.options());
-//            auto indices = at::empty({N, C}, feature.options().dtype(at::kInt));
-//            return std::make_tuple(output, indices);
-//          });
-
-//   // Non-inplace infer (returns a new tensor)
-//   m.impl("maxpool_infer",
-//          [](const Tensor &feature, const Tensor &knn) -> Tensor {
-//            auto N = knn.size(0);
-//            auto C = feature.size(1);
-//            return at::empty({N, C}, feature.options());
-//          });
-
-//   // Non-inplace backward (returns a new tensor)
-//   m.impl("maxpool_backward",
-//          [](int64_t m, const Tensor &indices, const Tensor &grad) -> Tensor {
-//            auto C = indices.size(1);
-//            return at::empty({m, C}, grad.options());
-//          });
-// }

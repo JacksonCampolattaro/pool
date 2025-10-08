@@ -84,4 +84,5 @@ POOL_FUNCTIONS = [
     # pytest.param(sparse_pool, id='sparse_pool'),
     # pytest.param(tosparse_pool, id='tosparse_pool'),
     pytest.param(cuda_pool, id='cuda_pool'),
+    # pytest.param(torch.compile(cuda_pool), id='compiled_cuda_pool'),
 ]

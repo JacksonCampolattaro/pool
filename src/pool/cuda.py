@@ -16,29 +16,31 @@ cuda = cpp_extension.load(
     verbose=True,
 )
 
-@torch.library.custom_op("pool::max_pool_infer", mutates_args=())
-def max_pool_infer(x: Tensor, index: Tensor) -> Tensor:
-    return cuda.maxpool_infer(x, index)
- 
-@torch.library.register_fake("pool::max_pool_infer")
-def _(x, index):
-    return x.new_empty([index.size(0), x.size(1)])
 
-@torch.library.custom_op("pool::max_pool_forward", mutates_args=())
-def max_pool_forward(x: Tensor, index: Tensor) -> tuple[Tensor, Tensor]:
-    return cuda.maxpool_forward(x, index)
- 
-@torch.library.register_fake("pool::max_pool_forward")
-def _(x, index):
-    return x.new_empty([index.size(0), x.size(1)]), x.new_empty([index.size(0), x.size(1)], dtype=torch.int)
 
-@torch.library.custom_op("pool::max_pool_backward", mutates_args=())
-def max_pool_backward(m: int, indices: Tensor, grad: Tensor) -> Tensor:
-    return cuda.maxpool_backward(m, indices, grad)
+@torch.library.custom_op("pool::max_pool_infer_inplace", mutates_args={'output'})
+def max_pool_infer_inplace(output: Tensor, x: Tensor, index: Tensor) -> None:
+    return cuda.maxpool_infer_inplace(output, x, index)
  
-@torch.library.register_fake("pool::max_pool_backward")
-def _(m, indices, grad):
-    return grad.new_empty([m, grad.size(1)])
+@torch.library.register_fake("pool::max_pool_infer_inplace")
+def _(output, x, index):
+    return
+
+@torch.library.custom_op("pool::max_pool_forward_inplace", mutates_args={'output', 'indices'})
+def max_pool_forward_inplace(output: Tensor, indices: Tensor, x: Tensor, index: Tensor) -> None:
+    return cuda.maxpool_forward_inplace(output, indices, x, index)
+ 
+@torch.library.register_fake("pool::max_pool_forward_inplace")
+def _(output, indices, x, index):
+    return
+
+@torch.library.custom_op("pool::max_pool_backward_inplace", mutates_args={'output'})
+def max_pool_backward_inplace(output: Tensor, indices: Tensor, grad: Tensor) -> Tensor:
+    return cuda.maxpool_backward_inplace(output, indices, grad)
+ 
+@torch.library.register_fake("pool::max_pool_backward_inplace")
+def _(output, indices, grad):
+    return
 
 
 class Maxpool(Function):
@@ -54,12 +56,16 @@ class Maxpool(Function):
         elif x.dtype == torch.float32 and x.shape[-1] % 4 != 0:
             raise ValueError("For float32, channel dimension must be a multiple of 4.")
 
+        out = torch.empty((index.size(0), x.size(-1)), dtype=x.dtype, device=x.device)
         ctx.m = x.size(0)
         if ctx.needs_input_grad[0]:
-            out, indices = max_pool_forward(x, index)
+            # out, indices = max_pool_forward(x, index)
+            indices = torch.empty_like(out, dtype=torch.uint32)
+            max_pool_forward_inplace(out, indices, x, index)
             ctx.save_for_backward(indices)
         else:
-            out = max_pool_infer(x, index)
+            max_pool_infer_inplace(out, x, index)
+            # out = max_pool_infer(x, index)
 
         return out
 
@@ -68,19 +74,9 @@ class Maxpool(Function):
     def backward(ctx, grad: torch.Tensor):
         grad = grad.contiguous()
         indices, = ctx.saved_tensors
-        out = max_pool_backward(ctx.m, indices, grad)
-
+        # out = max_pool_backward(ctx.m, indices, grad)
+        out = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
+        max_pool_backward_inplace(out, indices, grad)
         return out, None
 
-# @torch.library.custom_op("pool::_max_pool", mutates_args=())
-# def _max_pool(x: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
-#     return Maxpool.apply(x, index)
-#     # return torch.ops.pool.maxpool(x, index)
-
-# @torch.library.register_fake("pool::_max_pool")
-# def _(x, index):
-#     return x.new_empty([index.size(0), x.size(1)], dtype=x.dtype)
-
 max_pool = Maxpool.apply
-
-# max_pool = cuda.maxpool

@@ -11,10 +11,15 @@ TEST_CONFIGS_M_N_K_C = [
     (1024, 128, 24, 32),
     (128, 1024, 24, 32),
     (1024 * 4, 1024 * 4, 24, 32),
+    # (1024 * 64, 1024 * 64, 24, 256),
+    # (1024 * 256, 1024 * 256, 24, 64),
+]
+
+BENCHMARK_CONFIGS_M_N_K_C = [
+    # (1024 * 4, 1024 * 4, 24, 32),
     (1024 * 64, 1024 * 64, 24, 256),
     (1024 * 256, 1024 * 256, 24, 64),
 ]
-
 
 class TestInference:
 
@@ -36,7 +41,6 @@ class TestInference:
         edges = edges_for_pool_function(features, neighbors, pool_function)
 
         pooled = pool_function(features, edges)
-        # torch.library.opcheck(pool_function, features, edges)
 
         assert pooled.shape == (n, features.size(-1))
 
@@ -46,7 +50,7 @@ class TestInference:
         assert torch.isclose(pooled, naive_pool(features, neighbors)).all()
 
     @parameterizeByDevice
-    @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
+    @pytest.mark.parametrize('config', BENCHMARK_CONFIGS_M_N_K_C)
     @pytest.mark.parametrize('pool_function', POOL_FUNCTIONS)
     def test_inference_speed(self, benchmark, device: str, config: tuple, pool_function: Callable):
         features, neighbors = generate_input_data(*config, device=device)
