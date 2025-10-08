@@ -17,7 +17,6 @@ cuda = cpp_extension.load(
 )
 
 
-
 @torch.library.custom_op("pool::max_pool_infer_inplace", mutates_args={'output'})
 def max_pool_infer_inplace(output: Tensor, x: Tensor, index: Tensor) -> None:
     return cuda.maxpool_infer_inplace(output, x, index)
@@ -43,13 +42,13 @@ def _(output, indices, grad):
     return
 
 
-class Maxpool(Function):
+class MaxPool(Function):
 
     @staticmethod
     @custom_fwd(device_type='cuda')
     def forward(ctx, x: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
-        # assert x.is_cuda and index.is_cuda
-        assert x.is_contiguous() and index.is_contiguous()
+        assert x.is_cuda and index.is_cuda
+        x, index = x.contiguous(), index.contiguous()
         assert index.dtype == torch.int64 # TODO: maybe other index types could be supported?
         if x.dtype == torch.half and x.shape[-1] % 8 != 0:
             raise ValueError("For float16, channel dimension must be a multiple of 8.")
@@ -59,13 +58,11 @@ class Maxpool(Function):
         out = torch.empty((index.size(0), x.size(-1)), dtype=x.dtype, device=x.device)
         ctx.m = x.size(0)
         if ctx.needs_input_grad[0]:
-            # out, indices = max_pool_forward(x, index)
             indices = torch.empty_like(out, dtype=torch.uint32)
             max_pool_forward_inplace(out, indices, x, index)
             ctx.save_for_backward(indices)
         else:
             max_pool_infer_inplace(out, x, index)
-            # out = max_pool_infer(x, index)
 
         return out
 
@@ -74,9 +71,8 @@ class Maxpool(Function):
     def backward(ctx, grad: torch.Tensor):
         grad = grad.contiguous()
         indices, = ctx.saved_tensors
-        # out = max_pool_backward(ctx.m, indices, grad)
         out = torch.zeros((ctx.m, grad.size(-1)), dtype=grad.dtype, device=grad.device)
         max_pool_backward_inplace(out, indices, grad)
         return out, None
 
-max_pool = Maxpool.apply
+max_pool = MaxPool.apply

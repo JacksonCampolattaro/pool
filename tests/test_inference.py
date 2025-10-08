@@ -23,18 +23,17 @@ BENCHMARK_CONFIGS_M_N_K_C = [
 
 class TestInference:
 
-    @parameterizeByDevice
     @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
     @pytest.mark.parametrize('pool_function', POOL_FUNCTIONS)
     @pytest.mark.parametrize('requires_grad', [True, False])
     @pytest.mark.parametrize('dtype', VALUE_DTYPES)
     def test_inference_correctness(
-            self,
-            device: str,
-            config: tuple,
-            pool_function: Callable,
-            requires_grad: bool,
-            dtype: torch.dtype
+        self,
+        config: tuple,
+        pool_function: Callable,
+        requires_grad: bool,
+        dtype: torch.dtype,
+        device: str = "cuda",
     ):
         m, n, k, c = config
         features, neighbors = generate_input_data(*config, device=device, dtype=dtype, requires_grad=requires_grad)
@@ -49,10 +48,15 @@ class TestInference:
 
         assert torch.isclose(pooled, naive_pool(features, neighbors)).all()
 
-    @parameterizeByDevice
     @pytest.mark.parametrize('config', BENCHMARK_CONFIGS_M_N_K_C)
     @pytest.mark.parametrize('pool_function', POOL_FUNCTIONS)
-    def test_inference_speed(self, benchmark, device: str, config: tuple, pool_function: Callable):
+    def test_inference_speed(
+        self,
+        benchmark,
+        config: tuple,
+        pool_function: Callable,
+        device: str = "cuda",
+    ):
         features, neighbors = generate_input_data(*config, device=device)
         edges = edges_for_pool_function(features, neighbors, pool_function)
 

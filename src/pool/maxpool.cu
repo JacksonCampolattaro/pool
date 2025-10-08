@@ -12,7 +12,6 @@
 using torch::Tensor;
 
 
-
 constexpr uint64_t group_size = 8;
 constexpr uint64_t block = 512;
 

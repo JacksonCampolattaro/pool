@@ -18,16 +18,15 @@ SMALL_TEST_CONFIGS_M_N_K_C = [
 
 class TestBackprop:
 
-    @parameterizeByDevice
     @pytest.mark.parametrize('config', SMALL_TEST_CONFIGS_M_N_K_C)
     @pytest.mark.parametrize('pool_function', POOL_FUNCTIONS)
     @pytest.mark.parametrize('dtype', VALUE_DTYPES)
     def test_backprop_correctness(
             self,
-            device: str,
             config: tuple,
             pool_function: Callable,
-            dtype: torch.dtype
+            dtype: torch.dtype,
+            device: str = 'cuda',
     ):
         features, neighbors = generate_input_data(*config, device=device, dtype=dtype, requires_grad=True)
         features_ref = features.clone().detach().requires_grad_(True)
@@ -60,10 +59,15 @@ class TestBackprop:
         # print(features.grad - features_ref.grad)
         assert torch.isclose(features.grad, features_ref.grad, rtol=1e-2).all()
 
-    @parameterizeByDevice
     @pytest.mark.parametrize('config', TEST_CONFIGS_M_N_K_C)
     @pytest.mark.parametrize('pool_function', POOL_FUNCTIONS)
-    def test_roundtrip_speed(self, benchmark, device: str, config: tuple, pool_function: Callable):
+    def test_roundtrip_speed(
+        self,
+        benchmark,
+        config: tuple,
+        pool_function: Callable,
+        device: str = "cuda",
+    ):
         features, neighbors = generate_input_data(*config, device=device, requires_grad=True)
         edges = edges_for_pool_function(features, neighbors, pool_function)
 
