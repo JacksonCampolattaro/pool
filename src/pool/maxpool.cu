@@ -1,3 +1,5 @@
+#include <pybind11/pybind11.h>
+
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_fp16.h>
@@ -9,6 +11,7 @@
 #include <torch/extension.h>
 #include <torch/library.h>
 
+namespace py = pybind11;
 using torch::Tensor;
 
 
@@ -221,9 +224,9 @@ void maxpool_backward_inplace(Tensor &output, const Tensor &indices,
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("maxpool_forward_inplace", &maxpool_forward_inplace);
-  m.def("maxpool_infer_inplace", &maxpool_infer_inplace);
-  m.def("maxpool_backward_inplace", &maxpool_backward_inplace);
+  m.def("maxpool_forward_inplace", &maxpool_forward_inplace, py::call_guard<py::gil_scoped_release>());
+  m.def("maxpool_infer_inplace", &maxpool_infer_inplace, py::call_guard<py::gil_scoped_release>());
+  m.def("maxpool_backward_inplace", &maxpool_backward_inplace, py::call_guard<py::gil_scoped_release>());
 }
 
 
